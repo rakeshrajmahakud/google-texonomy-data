@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Product Taxonomy Tree</title>
+    <style>
+        /* Styling the tree structure */
+        .tree-container {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 600px;
+        }
+
+        .tree ul {
+            list-style: none;
+            padding-left: 20px;
+        }
+
+        .tree li {
+            cursor: pointer;
+            position: relative;
+            margin: 5px 0;
+        }
+
+        .tree li::before {
+            content: "";
+            position: absolute;
+            top: 10px;
+            left: -10px;
+            width: 10px;
+            height: 2px;
+            background: #ccc;
+        }
+
+        .tree li::after {
+            content: "";
+            position: absolute;
+            top: 10px;
+            left: -10px;
+            width: 2px;
+            height: 100%;
+            background: #ccc;
+        }
+
+        .tree li:last-child::after {
+            height: 10px;
+        }
+
+        .tree li.collapsed > ul {
+            display: none;
+        }
+
+        .tree li span {
+            padding: 5px 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+
+        .tree li span:hover {
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div id="taxonomyTree" class="tree-container"></div>
+
+    <script>
+        // CORS Anywhere Proxy
+        const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+        const taxonomyUrl = 'https://www.google.com/basepages/producttype/taxonomy-with-ids.en-US.txt';
+
+        // Fetch Google Product Taxonomy and build the tree
+        async function fetchGoogleTaxonomy() {
+            try {
+                // Fetch taxonomy data through CORS proxy
+                const response = await fetch(proxyUrl + taxonomyUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const text = await response.text();
+
+                // Parse the text into a structured nested JSON
+                const lines = text.split('\n').filter(line => line.trim() !== '');
+                const structuredData = [];
+                const lookup = {};
+
+                lines.forEach(line => {
+                    const [id, ...categoryParts] = line.split(' - ');
+                    const categoryPath = categoryParts.join(' - ').trim().split(' > ');
+
+                    // Build the nested structure
+                    categoryPath.reduce((acc, name, index) => {
+                        if (!acc[name]) {
+                            acc[name] = {
+                                name,
+                                id: index === categoryPath.length - 1 ? id.trim() : null,
+                                subcategories: {}
+                            };
+                        }
+                        return acc[name].subcategories;
+                    }, lookup);
+                });
+
+                // Convert lookup object to array structure
+                function convertToNestedArray(obj) {
+                    return Object.values(obj).map(item => ({
+                        name: item.name,
+                        id: item.id,
+                        subcategories: convertToNestedArray(item.subcategories)
+                    }));
+                }
+
+                const nestedData = convertToNestedArray(lookup);
+                console.log(nestedData);
+                // Render the tree UI
+                renderTree(nestedData, document.getElementById('taxonomyTree'));
+
+            } catch (error) {
+                console.error('Error fetching taxonomy:', error);
+                const errorMessage = document.createElement('p');
+                errorMessage.textContent = 'Failed to fetch the taxonomy. Please ensure the CORS proxy is enabled.';
+                document.getElementById('taxonomyTree').appendChild(errorMessage);
+            }
+        }
+
+        // Render the tree structure dynamically
+        function renderTree(data, container) {
+            const ul = document.createElement("ul");
+            ul.classList.add("tree");
+
+            data.forEach(item => {
+                const li = document.createElement("li");
+                const span = document.createElement("span");
+                span.textContent = item.name;
+
+                // Add subcategories if present
+                if (item.subcategories && item.subcategories.length > 0) {
+                    li.classList.add("collapsed"); // Initially collapsed
+                    li.addEventListener("click", (event) => {
+                        event.stopPropagation(); // Prevent event bubbling
+                        li.classList.toggle("collapsed");
+                    });
+                    renderTree(item.subcategories, li); // Recursive call
+                }
+
+                li.appendChild(span);
+                ul.appendChild(li);
+            });
+
+            container.appendChild(ul);
+        }
+
+        // Initialize the taxonomy tree
+        fetchGoogleTaxonomy();
+    </script>
+</body>
+</html>
